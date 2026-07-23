@@ -1,7 +1,7 @@
 import sqlite3
 from openpyxl import load_workbook
 
-from functions.paths import obtener_ruta_db, hacer_backup_db
+from functions.paths import obtener_ruta_db, hacer_backup_db, obtener_carpeta_imgs
 from functions.logger import obtener_logger      
 
 logger = obtener_logger()
@@ -250,9 +250,28 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
 
 
 def eliminar_producto(id=None, codigo=None):
+    """
+    Elimina un producto de la tabla stock, buscándolo por id o por codigo.
+    Debe especificarse al menos uno de los dos parámetros.
+
+    Además de borrar el registro de la base de datos, si el producto
+    tenía una imagen propia (distinta de 'default.png'), también borra
+    ese archivo de la carpeta mf-app/db/imgs, para no dejar imágenes
+    huérfanas ocupando espacio.
+
+    Devuelve True si se eliminó algo, False si no se encontró el producto.
+    """
     if id is None and codigo is None:
         logger.warning("Se llamó a eliminar_producto sin especificar id ni codigo.")
         print("Error: hay que especificar 'id' o 'codigo' para eliminar un producto.")
+        return False
+
+    # Primero buscamos el producto, para saber qué imagen tenía ANTES de borrarlo
+    producto = obtener_producto(id=id, codigo=codigo)
+
+    if producto is None:
+        logger.warning(f"No se encontró producto para eliminar (id={id}, codigo={codigo}).")
+        print("No se encontró ningún producto con esos datos.")
         return False
 
     ruta_db = obtener_ruta_db()
@@ -261,7 +280,6 @@ def eliminar_producto(id=None, codigo=None):
         with sqlite3.connect(str(ruta_db)) as conexion:
             cursor = conexion.cursor()
 
-            # Prioriza el id si se especificaron ambos
             if id is not None:
                 cursor.execute("DELETE FROM stock WHERE id = ?", (id,))
             else:
@@ -274,11 +292,24 @@ def eliminar_producto(id=None, codigo=None):
             logger.warning(f"No se encontró producto para eliminar (id={id}, codigo={codigo}).")
             print("No se encontró ningún producto con esos datos.")
             return False
-        else:
-            logger.warning(f"Producto eliminado (id={id}, codigo={codigo}).")
-            print("Producto eliminado correctamente.")
-            hacer_backup_db()
-            return True
+
+        # ---------- Borrar la imagen del producto, si tenía una propia ----------
+        nombre_imagen = producto.get("imagen")
+        if nombre_imagen and nombre_imagen != "default.png":
+            try:
+                ruta_imagen = obtener_carpeta_imgs() / nombre_imagen
+                if ruta_imagen.exists():
+                    ruta_imagen.unlink()
+                    logger.warning(f"Imagen '{nombre_imagen}' eliminada junto con el producto.")
+            except Exception as e:
+                # Si falla borrar la imagen, no revertimos el borrado del producto,
+                # pero sí lo dejamos registrado como advertencia.
+                logger.warning(f"El producto se eliminó, pero no se pudo borrar su imagen '{nombre_imagen}': {e}")
+
+        logger.warning(f"Producto eliminado (id={id}, codigo={codigo}).")
+        print("Producto eliminado correctamente.")
+        hacer_backup_db()
+        return True
 
     except sqlite3.Error as e:
         logger.error(f"Error al eliminar producto (id={id}, codigo={codigo}): {e}")

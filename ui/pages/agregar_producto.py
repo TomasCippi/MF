@@ -4,7 +4,7 @@ import customtkinter as ctk
 from tkinter import filedialog
 from PIL import Image
 
-from functions.db import insertar_producto
+from functions.db import insertar_producto, editar_producto
 from functions.paths import obtener_carpeta_imgs
 
 
@@ -30,26 +30,26 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
     crear ventanas secundarias (independientes de la ventana principal).
     """
 
-    def __init__(self, master, on_producto_agregado=None):
+    def __init__(self, master, producto=None, on_guardado=None):
+        """
+        producto: si se pasa un diccionario de producto existente, la ventana
+                  se abre en modo EDICIÓN (campos precargados, título y botón
+                  dicen "Editar producto"). Si es None, se abre en modo
+                  AÑADIR (como hasta ahora).
+        on_guardado: callback que se llama después de guardar con éxito
+                     (agregar o editar), para refrescar la lista de Stock.
+        """
         super().__init__(master)
 
-        self.on_producto_agregado = on_producto_agregado
-
-        # Ruta original del archivo de imagen elegido por el usuario.
-        # Se guarda en memoria nada más; la copia real a la carpeta de
-        # la app se hace recién al confirmar el producto.
+        self.producto = producto  # None = modo agregar, dict = modo editar
+        self.on_guardado = on_guardado
         self.ruta_imagen_seleccionada = None
 
-        # ---------- Configuración básica de la ventana ----------
-        self.title("Añadir producto")
+        self.title("Editar producto" if self.producto else "Añadir producto")
         self.geometry("450x650")
         self.configure(fg_color=COLOR_FONDO)
         self.resizable(False, False)
 
-        # 'transient' asocia esta ventana a la principal (se minimiza con ella, etc).
-        # 'grab_set' bloquea la interacción con la ventana principal mientras
-        # este popup esté abierto, para evitar que el usuario haga doble click
-        # en "Añadir producto" o interactúe con el fondo por error.
         self.transient(master)
         self.grab_set()
 
@@ -64,7 +64,7 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
 
         # ---------- Título ----------
         ctk.CTkLabel(
-            self, text="Añadir producto",
+            self, text="Editar producto" if self.producto else "Añadir producto",
             font=("Arial", 20, "bold"), text_color=COLOR_TEXTO
         ).pack(pady=(20, 15))
 
@@ -178,13 +178,13 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
         )
         self.label_error.pack(pady=(0, 5))
 
-        # ---------- Botón principal: Añadir producto ----------
+        # ---------- Botón principal ----------
         ctk.CTkButton(
-            self, text="Añadir producto",
+            self, text="Editar producto" if self.producto else "Añadir producto",
             fg_color=COLOR_BOTON_ACTIVO, hover_color=COLOR_HOVER,
             text_color=COLOR_TEXTO, corner_radius=8,
             font=("Arial", 13, "bold"),
-            command=self._confirmar_agregar
+            command=self._confirmar_guardar
         ).pack(pady=(5, 8), padx=25, fill="x")
 
         # ---------- Botón secundario: Cancelar ----------
@@ -194,6 +194,24 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
             text_color=COLOR_TEXTO, corner_radius=8,
             command=self.destroy
         ).pack(pady=(0, 20), padx=25, fill="x")
+
+        # ---------- Si es modo edición, precargamos los campos ----------
+        if self.producto:
+            self.entry_nombre.insert(0, self.producto.get("descripcion", ""))
+            self.entry_codigo.insert(0, self.producto.get("codigo", ""))
+            self.entry_precio.insert(0, str(self.producto.get("precio", "")))
+            self.entry_stock.insert(0, str(self.producto.get("cantidad_stock", "")))
+            self.entry_caja.insert(0, str(self.producto.get("cantidad_caja", "")))
+
+            # Si el producto ya tiene una imagen guardada (no la default),
+            # mostramos el botón en verde con el nombre de esa imagen.
+            imagen_actual = self.producto.get("imagen")
+            if imagen_actual and imagen_actual != "default.png":
+                self.boton_imagen.configure(
+                    text=imagen_actual,
+                    fg_color=COLOR_VERDE,
+                    hover_color=COLOR_VERDE_HOVER
+                )
 
         # ---------- Binds para "limpiar" el borde rojo al corregir ----------
         # Apenas el usuario empieza a escribir en un campo que había quedado
@@ -284,25 +302,21 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
     # Confirmar y guardar el producto
     # ------------------------------------------------------------------
 
-    def _confirmar_agregar(self):
+    def _confirmar_guardar(self):
         """
         Válida los campos obligatorios (marcando en rojo los que falten),
-        inserta el producto en la base de datos y, si todo salió bien,
-        copia la imagen seleccionada a la carpeta de almacenamiento de
-        la app, renombrada con el código del producto.
+        y según el modo (agregar o editar) inserta o actualiza el producto
+        en la base de datos. Si hay una imagen NUEVA seleccionada, recién
+        acá se copia a la carpeta de almacenamiento de la app.
         """
-        # Primero limpiamos cualquier borde rojo que haya quedado de un
-        # intento anterior, así no se acumulan errores viejos.
         self._resetear_bordes()
 
-        # Leemos y limpiamos los valores de los campos
         nombre = self.entry_nombre.get().strip()
         codigo = self.entry_codigo.get().strip()
         precio_texto = self.entry_precio.get().strip()
         stock_texto = self.entry_stock.get().strip()
         caja_texto = self.entry_caja.get().strip()
 
-        # ---------- Validación de campos obligatorios ----------
         hay_error = False
 
         if not nombre:
@@ -321,7 +335,6 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
             self.label_error.configure(text="Completá los campos obligatorios marcados en rojo.")
             return
 
-        # ---------- Conversión y validación del precio ----------
         try:
             precio = float(precio_texto)
         except ValueError:
@@ -329,50 +342,100 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
             self.label_error.configure(text="El precio debe ser un número válido.")
             return
 
-        # Cantidades opcionales: si el usuario no completó nada, usamos 1
-        # (mismo criterio que ya definimos en functions/db.py)
         cantidad_stock = int(stock_texto) if stock_texto else 1
         cantidad_caja = int(caja_texto) if caja_texto else 1
 
-        # ---------- Nombre final de la imagen (todavía no se copia) ----------
+        # Nombre final de la imagen: solo cambia si se eligió una NUEVA imagen.
+        # Si no se tocó el botón de imagen, se mantiene la que ya tenía el producto
+        # (pero renombrada si el código cambió, para que sigan coincidiendo).
         nombre_imagen_final = None
         if self.ruta_imagen_seleccionada:
             nombre_imagen_final = f"{codigo}.jpg"
+        elif self.producto:
+            imagen_anterior = self.producto.get("imagen")
+            if imagen_anterior and imagen_anterior != "default.png":
+                extension = os.path.splitext(imagen_anterior)[1]
+                nombre_imagen_final = f"{codigo}{extension}"
+            else:
+                nombre_imagen_final = imagen_anterior  # sigue siendo 'default.png'
 
-        # ---------- Insertar el producto en la base de datos ----------
-        nuevo_id = insertar_producto(
-            codigo=codigo,
-            descripcion=nombre,
-            precio=precio,
-            cantidad_caja=cantidad_caja,
-            cantidad_stock=cantidad_stock,
-            imagen=nombre_imagen_final
-        )
+        if self.producto:
+            # ---------- Modo edición ----------
+            imagen_anterior = self.producto.get("imagen")
 
-        # insertar_producto() devuelve None si el código ya existía
-        if nuevo_id is None:
-            self.entry_codigo.configure(border_color=COLOR_ERROR)
-            self.label_error.configure(text=f"El código '{codigo}' ya existe.")
-            return
+            exito = editar_producto(
+                id=self.producto["id"],
+                codigo=codigo,
+                descripcion=nombre,
+                precio=precio,
+                cantidad_caja=cantidad_caja,
+                cantidad_stock=cantidad_stock,
+                imagen=nombre_imagen_final
+            )
 
-        # ---------- Recién ahora procesamos y guardamos la imagen ----------
-        # Solo llegamos acá si el producto se insertó con éxito.
-        if self.ruta_imagen_seleccionada:
-            try:
-                carpeta_imgs = obtener_carpeta_imgs()
-                # Siempre guardamos como .jpg, sin importar la extensión original
-                destino = carpeta_imgs / f"{codigo}.jpg"
-                self._procesar_y_guardar_imagen(self.ruta_imagen_seleccionada, destino)
-            except Exception as e:
-                # El producto ya quedó guardado en la base; si falla la
-                # imagen, avisamos pero no revertimos el producto creado.
-                self.label_error.configure(text=f"Producto guardado, pero falló la imagen: {e}")
+            if not exito:
+                self.entry_codigo.configure(border_color=COLOR_ERROR)
+                self.label_error.configure(text=f"No se pudo editar (¿el código '{codigo}' ya existe en otro producto?).")
+                return
 
-        # ---------- Avisar a quien abrió esta ventana (ej: página Stock) ----------
-        if self.on_producto_agregado:
-            self.on_producto_agregado()
+            # ---------- Sincronizar el archivo de imagen con el cambio ----------
+            carpeta_imgs = obtener_carpeta_imgs()
 
-        # Cierra la ventana emergente
+            if self.ruta_imagen_seleccionada:
+                # Se eligió una imagen nueva: la procesamos y guardamos,
+                # y borramos la anterior (si tenía una propia, distinta de la nueva).
+                try:
+                    destino = carpeta_imgs / nombre_imagen_final
+                    self._procesar_y_guardar_imagen(self.ruta_imagen_seleccionada, destino)
+
+                    if (imagen_anterior and imagen_anterior != "default.png"
+                            and imagen_anterior != nombre_imagen_final):
+                        ruta_anterior = carpeta_imgs / imagen_anterior
+                        if ruta_anterior.exists():
+                            ruta_anterior.unlink()
+                except Exception as e:
+                    self.label_error.configure(text=f"Producto editado, pero falló la imagen: {e}")
+
+            elif (imagen_anterior and imagen_anterior != "default.png"
+                    and imagen_anterior != nombre_imagen_final):
+                # No se eligió imagen nueva, pero el código cambió: renombramos
+                # el archivo existente para que siga coincidiendo con el producto.
+                try:
+                    ruta_anterior = carpeta_imgs / imagen_anterior
+                    ruta_nueva = carpeta_imgs / nombre_imagen_final
+                    if ruta_anterior.exists():
+                        ruta_anterior.rename(ruta_nueva)
+                except Exception as e:
+                    self.label_error.configure(text=f"Producto editado, pero falló renombrar la imagen: {e}")
+
+        else:
+            # ---------- Modo agregar ----------
+            nuevo_id = insertar_producto(
+                codigo=codigo,
+                descripcion=nombre,
+                precio=precio,
+                cantidad_caja=cantidad_caja,
+                cantidad_stock=cantidad_stock,
+                imagen=nombre_imagen_final
+            )
+
+            if nuevo_id is None:
+                self.entry_codigo.configure(border_color=COLOR_ERROR)
+                self.label_error.configure(text=f"El código '{codigo}' ya existe.")
+                return
+
+            # Si se eligió una imagen, recién ahora la procesamos y guardamos
+            if self.ruta_imagen_seleccionada:
+                try:
+                    carpeta_imgs = obtener_carpeta_imgs()
+                    destino = carpeta_imgs / nombre_imagen_final
+                    self._procesar_y_guardar_imagen(self.ruta_imagen_seleccionada, destino)
+                except Exception as e:
+                    self.label_error.configure(text=f"Producto guardado, pero falló la imagen: {e}")
+
+        if self.on_guardado:
+            self.on_guardado()
+
         self.destroy()
 
     def _resetear_bordes(self):

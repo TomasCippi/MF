@@ -221,15 +221,11 @@ class PaginaStock(ctk.CTkFrame):
     def _on_eliminar_producto(self, producto):
         VentanaConfirmarEliminar(self, producto=producto, on_eliminado=self._cargar_productos)
 
+    def _abrir_agregar_producto(self):
+        VentanaAgregarProducto(self, producto=None, on_guardado=self._cargar_productos)
+
     def _on_editar_producto(self, producto):
-        print(f"Editar producto: {producto.get('codigo')} (pendiente de implementar).")
+        VentanaAgregarProducto(self, producto=producto, on_guardado=self._cargar_productos)
 
     def _on_agregar_factura(self, producto):
         print(f"Añadir a factura: {producto.get('codigo')} (pendiente de implementar).")
-
-    def _abrir_agregar_producto(self):
-        """
-        Abre la ventana emergente para añadir un producto nuevo.
-        Al confirmar, refresca la cantidad de productos en la burbuja.
-        """
-        VentanaAgregarProducto(self, on_producto_agregado=self._cargar_productos)
