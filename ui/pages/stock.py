@@ -6,6 +6,7 @@ import unicodedata
 from functions.db import obtener_productos
 from ui.pages.agregar_producto import VentanaAgregarProducto
 from ui.components.fila_producto import FilaProducto
+from ui.pages.confirmar_eliminar import VentanaConfirmarEliminar
 
 COLOR_FONDO = "#1a1a1a"
 COLOR_BURBUJA = "#3a3a3a"
@@ -218,7 +219,7 @@ class PaginaStock(ctk.CTkFrame):
     # ---------- Callbacks de los botones de cada fila (por ahora, placeholders) ----------
 
     def _on_eliminar_producto(self, producto):
-        print(f"Eliminar producto: {producto.get('codigo')} (pendiente de implementar).")
+        VentanaConfirmarEliminar(self, producto=producto, on_eliminado=self._cargar_productos)
 
     def _on_editar_producto(self, producto):
         print(f"Editar producto: {producto.get('codigo')} (pendiente de implementar).")

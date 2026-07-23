@@ -143,16 +143,6 @@ def _validar_datos_producto(precio=None, cantidad_caja=None, cantidad_stock=None
         raise ValueError("La cantidad en stock no puede ser negativa.")
 
 def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_stock=1, imagen=None):
-    """
-    Inserta un nuevo producto en la tabla stock.
-
-    - cantidad_caja y cantidad_stock son opcionales, por defecto valen 1.
-    - imagen es opcional, por defecto se usa 'default.png'.
-    - codigo, descripcion y precio son obligatorios.
-
-    Devuelve el id del producto insertado, o None si falló (ej: código repetido).
-    """
-
     if imagen is None:
         imagen = "default.png"
 
@@ -177,6 +167,7 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
 
         logger.warning(f"Producto creado: codigo='{codigo}', id={nuevo_id}.")
         print(f"Producto '{codigo}' insertado correctamente (id={nuevo_id}).")
+        hacer_backup_db()
         return nuevo_id
 
     except sqlite3.IntegrityError:
@@ -192,17 +183,7 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
         raise
 
 
-def editar_producto(id, codigo=None, descripcion=None, precio=None,
-                     cantidad_caja=None, cantidad_stock=None, imagen=None):
-    """
-    Edita un producto existente, identificado por su id.
-    Solo se actualizan los campos que se especifiquen (los que queden en None
-    no se tocan, así se puede editar un solo campo sin afectar el resto).
-
-    Devuelve True si se actualizó correctamente, False si no se encontró
-    el producto o no se especificó ningún campo.
-    """
-    # Armamos un diccionario con todos los campos posibles
+def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caja=None, cantidad_stock=None, imagen=None):
     campos = {
         "codigo": codigo,
         "descripcion": descripcion,
@@ -252,6 +233,7 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None,
         else:
             logger.warning(f"Producto editado (id={id}): campos modificados: {list(campos_a_actualizar.keys())}.")
             print("Producto editado correctamente.")
+            hacer_backup_db()
             return True
 
     except sqlite3.IntegrityError:
@@ -268,12 +250,6 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None,
 
 
 def eliminar_producto(id=None, codigo=None):
-    """
-    Elimina un producto de la tabla stock, buscándolo por id o por codigo.
-    Debe especificarse al menos uno de los dos parámetros.
-
-    Devuelve True si se eliminó algo, False si no se encontró el producto.
-    """
     if id is None and codigo is None:
         logger.warning("Se llamó a eliminar_producto sin especificar id ni codigo.")
         print("Error: hay que especificar 'id' o 'codigo' para eliminar un producto.")
@@ -301,6 +277,7 @@ def eliminar_producto(id=None, codigo=None):
         else:
             logger.warning(f"Producto eliminado (id={id}, codigo={codigo}).")
             print("Producto eliminado correctamente.")
+            hacer_backup_db()
             return True
 
     except sqlite3.Error as e:
@@ -490,6 +467,8 @@ def cargar_productos_excel(ruta_archivo):
             f"Carga masiva desde '{ruta_archivo}' completada: {len(productos)} producto(s) insertado(s), "
             f"{len(resultado['duplicados'])} duplicado(s) descartado(s)."
         )
+
+        hacer_backup_db()
 
     except Exception as e:
         logger.error(f"Error al insertar productos durante la carga masiva: {e}")

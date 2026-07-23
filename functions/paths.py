@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import gzip
 from datetime import datetime
 from pathlib import Path
 
@@ -46,48 +47,58 @@ def obtener_ruta_db():
 
 def hacer_backup_db():
     """
-    Crea una copia de seguridad del archivo de base de datos,
-    con la fecha en el nombre, dentro de mf-app/backups.
-    Si el archivo de la base de datos aún no existe, no hace nada.
-    También elimina backups con más de 30 días de antigüedad.
+    Crea un backup NUEVO y comprimido del archivo de base de datos, con
+    fecha y hora exacta en el nombre. Cada acción (crear, editar, eliminar,
+    carga masiva) genera su propio archivo, sin pisar los anteriores.
+
+    El backup se guarda comprimido con gzip (extensión .db.gz), lo que
+    reduce bastante su peso comparado con copiar el archivo tal cual.
+
+    Después de crear el backup, llama a limpiar_backups_viejos() para
+    mantener como máximo 30 backups guardados.
     """
     ruta_db = obtener_ruta_db()
 
     if not ruta_db.exists():
-        return
+        return  # no hay nada que respaldar todavía
 
     carpeta_app = obtener_carpeta_app().parent
     carpeta_backups = carpeta_app / "backups"
     carpeta_backups.mkdir(parents=True, exist_ok=True)
 
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    ruta_backup = carpeta_backups / f"mf-app_{fecha_hoy}.db"
+    momento = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    ruta_backup = carpeta_backups / f"mf-app_{momento}.db.gz"
 
-    if not ruta_backup.exists():
-        shutil.copy2(ruta_db, ruta_backup)
+    # Lee el archivo original y lo escribe comprimido con gzip
+    with open(ruta_db, "rb") as archivo_original:
+        with gzip.open(ruta_backup, "wb") as archivo_comprimido:
+            shutil.copyfileobj(archivo_original, archivo_comprimido)
 
     limpiar_backups_viejos()
 
-def limpiar_backups_viejos(dias=30):
+
+def limpiar_backups_viejos(cantidad_maxima=30):
     """
-    Elimina los archivos de backup que tengan más de 'dias' días de antigüedad,
-    para que la carpeta de backups no crezca indefinidamente.
+    Mantiene como máximo 'cantidad_maxima' backups guardados.
+    Si hay más, elimina los más viejos (según fecha de modificación),
+    dejando siempre los más recientes.
     """
     carpeta_app = obtener_carpeta_app().parent
     carpeta_backups = carpeta_app / "backups"
 
     if not carpeta_backups.exists():
-        return  # no hay carpeta de backups todavía, no hay nada que limpiar
+        return
 
-    ahora = datetime.now()
+    backups = sorted(
+        carpeta_backups.glob("mf-app_*.db.gz"),
+        key=lambda archivo: archivo.stat().st_mtime,
+        reverse=True
+    )
 
-    for archivo in carpeta_backups.glob("mf-app_*.db"):
-        # Fecha de última modificación del archivo
-        fecha_modificacion = datetime.fromtimestamp(archivo.stat().st_mtime)
-        antiguedad = (ahora - fecha_modificacion).days
+    backups_a_eliminar = backups[cantidad_maxima:]
 
-        if antiguedad > dias:
-            archivo.unlink()  # elimina el archivo
+    for archivo in backups_a_eliminar:
+        archivo.unlink()
 
 def obtener_carpeta_imgs():
     """
