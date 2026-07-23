@@ -88,3 +88,13 @@ def limpiar_backups_viejos(dias=30):
 
         if antiguedad > dias:
             archivo.unlink()  # elimina el archivo
+
+def obtener_carpeta_imgs():
+    """
+    Devuelve la carpeta donde se guardan las imágenes de los productos,
+    dentro de la carpeta 'db' (mf-app/db/imgs), creándola si no existe.
+    """
+    carpeta_db = obtener_carpeta_app()
+    carpeta_imgs = carpeta_db / "imgs"
+    carpeta_imgs.mkdir(parents=True, exist_ok=True)
+    return carpeta_imgs
