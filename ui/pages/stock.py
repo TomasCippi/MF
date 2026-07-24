@@ -2,12 +2,16 @@ import customtkinter as ctk
 from PIL import Image
 import os
 import unicodedata
+from tkinter import filedialog
+from datetime import datetime
 
+from functions.exportar_lista import exportar_stock_excel
 from functions.db import obtener_productos
 from ui.pages.agregar_producto import VentanaAgregarProducto
 from ui.components.fila_producto import FilaProducto
 from ui.pages.confirmar_eliminar import VentanaConfirmarEliminar
 from ui.pages.subir_masivo import VentanaSubirMasivo
+from ui.components.toast import mostrar_toast
 
 COLOR_FONDO = "#1a1a1a"
 COLOR_BURBUJA = "#3a3a3a"
@@ -152,7 +156,7 @@ class PaginaStock(ctk.CTkFrame):
             fg_color=COLOR_BURBUJA, hover_color="#4a4a4a",
             text_color=COLOR_TEXTO, corner_radius=8,
             font=("Arial", 13), width=140, height=36,
-            command=lambda: print("Exportar lista (pendiente de implementar).")
+            command=self._exportar_lista
         ).pack(side="left")
 
     def _crear_pool_filas(self):
@@ -289,3 +293,24 @@ class PaginaStock(ctk.CTkFrame):
 
     def _abrir_subir_masivo(self):
         VentanaSubirMasivo(self, on_completado=self._cargar_productos)
+
+    def _exportar_lista(self):
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        nombre_sugerido = f"MF_precios_{fecha_hoy}.xlsx"
+
+        ruta = filedialog.asksaveasfilename(
+            title="Guardar listado de stock",
+            defaultextension=".xlsx",
+            filetypes=[("Archivo Excel", "*.xlsx")],
+            initialfile=nombre_sugerido
+        )
+
+        if not ruta:
+            return  # el usuario canceló el diálogo
+
+        exito = exportar_stock_excel(ruta)
+
+        if exito:
+            mostrar_toast(self, "Lista exportada correctamente.", tipo="exito")
+        else:
+            mostrar_toast(self, "No se pudo exportar la lista.", tipo="error")
