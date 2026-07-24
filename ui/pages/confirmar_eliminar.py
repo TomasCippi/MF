@@ -1,5 +1,15 @@
+"""
+ui/pages/confirmar_eliminar.py
+
+Ventana emergente (popup) de confirmación antes de eliminar un producto.
+Muestra el nombre del producto en grande, y dos botones: Eliminar (rojo)
+y Cancelar (gris). Solo si se confirma, se llama a eliminar_producto()
+de functions/db.py.
+"""
+
 import customtkinter as ctk
 from functions.db import eliminar_producto
+from ui.components.toast import mostrar_toast
 
 # ---------- Colores ----------
 COLOR_FONDO = "#1a1a1a"
@@ -11,6 +21,15 @@ COLOR_GRIS_HOVER = "#4a4a4a"
 
 
 class VentanaConfirmarEliminar(ctk.CTkToplevel):
+    """
+    Ventana emergente que pide confirmación antes de eliminar un producto.
+
+    producto: diccionario del producto a eliminar (necesita al menos 'codigo'
+               y 'descripcion').
+    on_eliminado: callback opcional, se llama después de eliminar con éxito
+                  (por ejemplo, para refrescar la lista de Stock).
+    """
+
     def __init__(self, master, producto, on_eliminado=None):
         super().__init__(master)
         self.producto = producto
@@ -21,14 +40,12 @@ class VentanaConfirmarEliminar(ctk.CTkToplevel):
         self.configure(fg_color=COLOR_FONDO)
         self.resizable(False, False)
 
-        # Asocia esta ventana a la principal y bloquea la interacción de fondo
         self.transient(master)
         self.grab_set()
 
         self._crear_widgets()
 
     def _crear_widgets(self):
-        # ---------- Texto de advertencia ----------
         ctk.CTkLabel(
             self,
             text="¿Eliminar este producto?",
@@ -36,7 +53,6 @@ class VentanaConfirmarEliminar(ctk.CTkToplevel):
             text_color="#9a9a9a"
         ).pack(pady=(30, 5))
 
-        # ---------- Nombre del producto, grande y llamativo ----------
         nombre = self.producto.get("descripcion", "")
         ctk.CTkLabel(
             self,
@@ -47,7 +63,6 @@ class VentanaConfirmarEliminar(ctk.CTkToplevel):
             justify="center"
         ).pack(pady=(0, 30), padx=20)
 
-        # ---------- Botones ----------
         fila_botones = ctk.CTkFrame(self, fg_color="transparent")
         fila_botones.pack(fill="x", padx=25, pady=(0, 20))
 
@@ -76,12 +91,16 @@ class VentanaConfirmarEliminar(ctk.CTkToplevel):
     def _confirmar_eliminacion(self):
         """
         Elimina el producto de la base de datos usando su código,
-        avisa al callback (si existe) para refrescar la lista, y cierra
-        la ventana.
+        avisa al callback (si existe) para refrescar la lista, muestra
+        un toast de confirmación y cierra la ventana.
         """
+        nombre = self.producto.get("descripcion", "El producto")
         eliminar_producto(codigo=self.producto.get("codigo"))
 
         if self.on_eliminado:
             self.on_eliminado()
+
+        # Se dispara con self.master porque esta ventana está por cerrarse
+        mostrar_toast(self.master, f"{nombre} eliminado correctamente.", tipo="exito")
 
         self.destroy()
