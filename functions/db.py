@@ -142,7 +142,7 @@ def _validar_datos_producto(precio=None, cantidad_caja=None, cantidad_stock=None
     if cantidad_stock is not None and cantidad_stock < 0:
         raise ValueError("La cantidad en stock no puede ser negativa.")
 
-def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_stock=1, imagen=None):
+def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_stock=1, imagen=None, hacer_backup=True):
     if imagen is None:
         imagen = "default.png"
 
@@ -163,15 +163,17 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (codigo, descripcion, precio, cantidad_caja, cantidad_stock, imagen))
             conexion.commit()
-            nuevo_id = cursor.lastrowid  # id autogenerado del producto recién insertado
+            nuevo_id = cursor.lastrowid
 
         logger.warning(f"Producto creado: codigo='{codigo}', id={nuevo_id}.")
         print(f"Producto '{codigo}' insertado correctamente (id={nuevo_id}).")
-        hacer_backup_db()
+
+        if hacer_backup:
+            hacer_backup_db()
+
         return nuevo_id
 
     except sqlite3.IntegrityError:
-        # Salta cuando se viola el UNIQUE del campo 'codigo'
         logger.warning(f"No se pudo insertar el producto: el código '{codigo}' ya existe.")
         print(f"Error: el código '{codigo}' ya existe.")
         return None
@@ -250,17 +252,6 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
 
 
 def eliminar_producto(id=None, codigo=None):
-    """
-    Elimina un producto de la tabla stock, buscándolo por id o por codigo.
-    Debe especificarse al menos uno de los dos parámetros.
-
-    Además de borrar el registro de la base de datos, si el producto
-    tenía una imagen propia (distinta de 'default.png'), también borra
-    ese archivo de la carpeta mf-app/db/imgs, para no dejar imágenes
-    huérfanas ocupando espacio.
-
-    Devuelve True si se eliminó algo, False si no se encontró el producto.
-    """
     if id is None and codigo is None:
         logger.warning("Se llamó a eliminar_producto sin especificar id ni codigo.")
         print("Error: hay que especificar 'id' o 'codigo' para eliminar un producto.")
@@ -488,8 +479,8 @@ def cargar_productos_excel(ruta_archivo):
                 descripcion=producto["descripcion"],
                 precio=producto["precio"],
                 cantidad_caja=producto["cantidad_caja"],
-                cantidad_stock=producto["cantidad_stock"]
-                # la imagen se deja como 'default.png' (valor por defecto)
+                cantidad_stock=producto["cantidad_stock"],
+                hacer_backup=False  # evitamos 500 backups; hacemos uno solo al final
             )
         resultado["exito"] = True
         resultado["insertados"] = len(productos)
@@ -499,7 +490,7 @@ def cargar_productos_excel(ruta_archivo):
             f"{len(resultado['duplicados'])} duplicado(s) descartado(s)."
         )
 
-        hacer_backup_db()
+        hacer_backup_db()  # un solo backup, con todos los productos ya insertados
 
     except Exception as e:
         logger.error(f"Error al insertar productos durante la carga masiva: {e}")
