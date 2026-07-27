@@ -160,18 +160,11 @@ class PaginaStock(ctk.CTkFrame):
         ).pack(side="left")
 
     def _crear_pool_filas(self):
-        """
-        Crea de una sola vez todas las filas que va a necesitar como
-        máximo (PRODUCTOS_POR_PAGINA), ya empaquetadas pero sin datos.
-        A partir de acá, nunca más se crean ni destruyen filas: solo
-        se actualizan y se muestran/ocultan según haga falta.
-        """
         for _ in range(PRODUCTOS_POR_PAGINA):
             fila = FilaProducto(
                 self.contenedor_productos,
                 on_eliminar=self._on_eliminar_producto,
-                on_editar=self._on_editar_producto,
-                on_agregar_factura=self._on_agregar_factura
+                on_editar=self._on_editar_producto
             )
             self._pool_filas.append(fila)
 
@@ -284,9 +277,6 @@ class PaginaStock(ctk.CTkFrame):
 
     def _on_editar_producto(self, producto):
         VentanaAgregarProducto(self, producto=producto, on_guardado=self._cargar_productos)
-
-    def _on_agregar_factura(self, producto):
-        print(f"Añadir a factura: {producto.get('codigo')} (pendiente de implementar).")
 
     def _abrir_agregar_producto(self):
         VentanaAgregarProducto(self, producto=None, on_guardado=self._cargar_productos)

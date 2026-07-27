@@ -3,6 +3,7 @@ import customtkinter as ctk
 from PIL import Image
 
 from functions.paths import obtener_carpeta_imgs
+from functions import carrito
 
 COLOR_FILA = "#242424"
 COLOR_TEXTO = "#ffffff"
@@ -64,19 +65,18 @@ def _cargar_imagen_producto(nombre_imagen):
 
 class FilaProducto(ctk.CTkFrame):
     """
-    Fila de producto RECICLABLE: se crea una sola vez y se reutiliza
-    llamando a actualizar(producto) en vez de destruirla y crear una nueva.
-    corner_radius=0 en toda la fila para renderizar más rápido.
+    Fila de producto reciclable (pool). El botón de agregar al pedido
+    arranca como un simple "+"; al tocarlo, se transforma en un stepper
+    (− número +) para poder ajustar la cantidad sin volver a tocar "+".
     """
 
-    def __init__(self, master, on_eliminar=None, on_editar=None, on_agregar_factura=None):
+    def __init__(self, master, on_eliminar=None, on_editar=None):
         super().__init__(master, fg_color=COLOR_FILA, corner_radius=0, height=64)
         self.pack_propagate(False)
 
         self.producto = None
         self.on_eliminar = on_eliminar
         self.on_editar = on_editar
-        self.on_agregar_factura = on_agregar_factura
 
         self._crear_widgets()
 
@@ -141,19 +141,79 @@ class FilaProducto(ctk.CTkFrame):
             command=lambda: self.on_editar(self.producto) if self.on_editar and self.producto else None
         ).pack(side="left", padx=(0, 6))
 
-        icono_factura = _cargar_icono("factura.png")
-        ctk.CTkButton(
-            columna_botones, text="" if icono_factura else "+", image=icono_factura,
+        # ---------- Zona del carrito: arranca como un solo botón "+" ----------
+        self.contenedor_carrito = ctk.CTkFrame(columna_botones, fg_color="transparent")
+        self.contenedor_carrito.pack(side="left")
+
+        self.boton_mas_inicial = ctk.CTkButton(
+            self.contenedor_carrito, text="+",
             width=TAMANO_BOTON, height=TAMANO_BOTON,
             fg_color=COLOR_BOTON_ACTIVO, hover_color=COLOR_HOVER, corner_radius=0,
-            command=lambda: self.on_agregar_factura(self.producto) if self.on_agregar_factura and self.producto else None
-        ).pack(side="left")
+            font=("Arial", 14, "bold"),
+            command=self._agregar_al_pedido
+        )
+
+        self.boton_restar = ctk.CTkButton(
+            self.contenedor_carrito, text="−",
+            width=TAMANO_BOTON, height=TAMANO_BOTON,
+            fg_color=COLOR_GRIS, hover_color=COLOR_GRIS_HOVER, corner_radius=0,
+            font=("Arial", 14, "bold"),
+            command=lambda: self._cambiar_cantidad(-1)
+        )
+
+        self.label_cantidad = ctk.CTkLabel(
+            self.contenedor_carrito, text="0", width=28,
+            font=("Arial", 13, "bold"), text_color=COLOR_TEXTO
+        )
+
+        self.boton_sumar = ctk.CTkButton(
+            self.contenedor_carrito, text="+",
+            width=TAMANO_BOTON, height=TAMANO_BOTON,
+            fg_color=COLOR_BOTON_ACTIVO, hover_color=COLOR_HOVER, corner_radius=0,
+            font=("Arial", 14, "bold"),
+            command=lambda: self._cambiar_cantidad(1)
+        )
+
+    def _mostrar_stepper(self):
+        """Oculta el botón '+' inicial y muestra − número +."""
+        self.boton_mas_inicial.pack_forget()
+        self.boton_restar.pack(side="left")
+        self.label_cantidad.pack(side="left")
+        self.boton_sumar.pack(side="left")
+
+    def _mostrar_boton_inicial(self):
+        """Oculta el stepper y vuelve a mostrar solo el botón '+'."""
+        self.boton_restar.pack_forget()
+        self.label_cantidad.pack_forget()
+        self.boton_sumar.pack_forget()
+        self.boton_mas_inicial.pack(side="left")
+
+    def _agregar_al_pedido(self):
+        """Primer toque en '+': agrega 1 al carrito y pasa a mostrar el stepper."""
+        if not self.producto:
+            return
+
+        cantidad = carrito.agregar_producto(self.producto)
+        self.label_cantidad.configure(text=str(cantidad))
+        self._mostrar_stepper()
+
+    def _cambiar_cantidad(self, delta):
+        """Suma o resta desde el stepper. Si llega a 0, vuelve a mostrar solo '+'."""
+        if not self.producto:
+            return
+
+        codigo = self.producto.get("codigo")
+        cantidad = carrito.cambiar_cantidad(codigo, delta)
+        self.label_cantidad.configure(text=str(cantidad))
+
+        if cantidad == 0:
+            self._mostrar_boton_inicial()
 
     def actualizar(self, producto):
         """
-        Actualiza el contenido de esta fila ya existente con los datos
-        de un nuevo producto, sin destruir ni recrear ningún widget.
-        Mucho más rápido que crear una FilaProducto nueva.
+        Actualiza el contenido de esta fila reciclada con los datos de
+        un nuevo producto, y sincroniza el estado del carrito (muestra
+        el stepper si ya tiene cantidad > 0, o el botón '+' si no).
         """
         self.producto = producto
 
@@ -163,3 +223,11 @@ class FilaProducto(ctk.CTkFrame):
         self.label_caja.configure(text=f"Caja: {producto.get('cantidad_caja', 0)}")
         self.label_stock.configure(text=f"Stock: {producto.get('cantidad_stock', 0)}")
         self.label_precio.configure(text=f"${producto.get('precio', 0):,.2f}")
+
+        cantidad_actual = carrito.obtener_cantidad(producto.get("codigo"))
+        self.label_cantidad.configure(text=str(cantidad_actual))
+
+        if cantidad_actual > 0:
+            self._mostrar_stepper()
+        else:
+            self._mostrar_boton_inicial()
