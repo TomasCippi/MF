@@ -3,9 +3,24 @@ from openpyxl import load_workbook
 
 from functions.paths import obtener_ruta_db, hacer_backup_db, obtener_carpeta_imgs
 from functions.logger import obtener_logger      
+import time
 
 logger = obtener_logger()
 
+
+def _cargar_productos(self):
+    t0 = time.time()
+    try:
+        self.todos_los_productos = obtener_productos()
+    except Exception:
+        self.todos_los_productos = []
+    print(f"obtener_productos: {time.time() - t0:.3f}s")
+
+    t1 = time.time()
+    self.productos_filtrados = self.todos_los_productos
+    self.pagina_actual = 1
+    self._actualizar_vista()
+    print(f"actualizar_vista: {time.time() - t1:.3f}s")
 # ---------- Inicialización ----------
 
 def crear_tablas():

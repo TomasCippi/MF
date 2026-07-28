@@ -35,24 +35,33 @@ class App(ctk.CTk):
         self._configurar_icono()
         self._maximizar_ventana()
 
-        # ---------- Barra superior ----------
-        self.topbar = TopBar(self, on_navegar=self.mostrar_pagina, pagina_inicial="stock")
-        self.topbar.pack(side="top", fill="x")
-
-        # ---------- Contenedor de páginas ----------
-        self.contenedor = ctk.CTkFrame(self, fg_color=COLOR_FONDO, corner_radius=0)
-        self.contenedor.pack(side="top", fill="both", expand=True)
-
-        # Diccionario clave -> clase de la página (todavía no instanciadas)
         self.clases_paginas = {
             "stock": PaginaStock,
             "pedido": PaginaPedido,
             "configuracion": PaginaConfiguracion,
             "informacion": PaginaInformacion,
         }
-
         self.pagina_actual = None
-        self.mostrar_pagina("stock")  # página inicial
+
+        self.label_cargando = ctk.CTkLabel(
+            self, text="Cargando MF App...",
+            font=("Arial", 18), text_color="#9a9a9a"
+        )
+        self.label_cargando.pack(expand=True, fill="both")
+
+        self.update()  # fuerza el dibujado inmediato, antes de seguir
+        self.after(10, self._iniciar_app)
+
+    def _iniciar_app(self):
+        self.label_cargando.destroy()
+
+        self.topbar = TopBar(self, on_navegar=self.mostrar_pagina, pagina_inicial="stock")
+        self.topbar.pack(side="top", fill="x")
+
+        self.contenedor = ctk.CTkFrame(self, fg_color=COLOR_FONDO, corner_radius=0)
+        self.contenedor.pack(side="top", fill="both", expand=True)
+
+        self.mostrar_pagina("stock")
 
     def _configurar_icono(self):
         """
@@ -83,13 +92,18 @@ class App(ctk.CTk):
                 self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}")
 
     def mostrar_pagina(self, clave):
-        """
-        Destruye la página actual (si hay una) y muestra la nueva,
-        según la clave recibida desde el TopBar.
-        """
-        if self.pagina_actual is not None:
-            self.pagina_actual.destroy()
+        if not hasattr(self, "_paginas_creadas"):
+            self._paginas_creadas = {}
 
-        clase_pagina = self.clases_paginas[clave]
-        self.pagina_actual = clase_pagina(self.contenedor)
+        if self.pagina_actual is not None:
+            self.pagina_actual.pack_forget()
+
+        if clave not in self._paginas_creadas:
+            clase_pagina = self.clases_paginas[clave]
+            self._paginas_creadas[clave] = clase_pagina(self.contenedor)
+
+        self.pagina_actual = self._paginas_creadas[clave]
         self.pagina_actual.pack(fill="both", expand=True)
+
+        if hasattr(self.pagina_actual, "al_mostrar"):
+            self.pagina_actual.al_mostrar()

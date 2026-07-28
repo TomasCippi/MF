@@ -24,8 +24,8 @@ COLOR_HOVER = "#5aa5dd"
 
 RUTA_ICONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "icons")
 
-PRODUCTOS_POR_PAGINA = 20
-RETRASO_BUSQUEDA_MS = 200
+PRODUCTOS_POR_PAGINA = 10
+RETRASO_BUSQUEDA_MS = 0
 
 
 class PaginaStock(ctk.CTkFrame):
@@ -48,7 +48,10 @@ class PaginaStock(ctk.CTkFrame):
         self._crear_botones_inferiores()
         self._crear_pool_filas()
 
-        self._cargar_productos()
+        self.after(10, self._cargar_productos)
+
+    def al_mostrar(self):
+        self.after(10, self._cargar_productos)
 
     # ------------------------------------------------------------------
     # Construcción de la interfaz
