@@ -6,9 +6,10 @@ Sistema de escritorio para la gestión de stock, pedidos y facturación de **MF 
 
 ## Capturas
 
-<img src="./capturas/captura1.png" width="500">
-<img src="./capturas/captura2.png" width="500">
-<img src="./capturas/captura3.png" width="500">
+<img src="./assets/capturas/captura-1.png" width="500">
+<img src="./assets/capturas/captura-2.png" width="500">
+<img src="./assets/capturas/captura-3.png" width="500">
+<img src="./assets/capturas/captura-4.png" width="500">
 
 ## Qué hace
 
