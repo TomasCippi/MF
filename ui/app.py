@@ -1,5 +1,7 @@
 import sys
 import os
+from tkinter import messagebox
+from functions import carrito
 
 import customtkinter as ctk
 from PIL import Image
@@ -13,17 +15,11 @@ from ui.pages.informacion import PaginaInformacion
 
 COLOR_FONDO = "#1a1a1a"
 
-# Carpeta assets, un nivel arriba de ui/
-RUTA_ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+from functions.paths import obtener_ruta_assets
+RUTA_ASSETS = obtener_ruta_assets()
 
 
 class App(ctk.CTk):
-    """
-    Ventana principal de la aplicación.
-    Contiene la barra superior (TopBar) y un contenedor donde se
-    muestra la página activa (Stock, Pedido, Configuración, Información).
-    """
-
     def __init__(self):
         super().__init__()
 
@@ -34,6 +30,8 @@ class App(ctk.CTk):
 
         self._configurar_icono()
         self._maximizar_ventana()
+
+        self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
 
         self.clases_paginas = {
             "stock": PaginaStock,
@@ -107,3 +105,21 @@ class App(ctk.CTk):
 
         if hasattr(self.pagina_actual, "al_mostrar"):
             self.pagina_actual.al_mostrar()
+
+    def _al_cerrar(self):
+        """
+        Se ejecuta al intentar cerrar la ventana (botón X). Si hay
+        productos cargados en el carrito de Pedido sin facturar, pide
+        confirmación antes de cerrar para evitar perderlos por error.
+        """
+        if carrito.obtener_carrito():
+            confirmar = messagebox.askyesno(
+                "Pedido sin facturar",
+                "Tenés productos en el pedido sin facturar. "
+                "Si cerrás la app ahora, se van a perder.\n\n"
+                "¿Querés cerrar igual?"
+            )
+            if not confirmar:
+                return  # cancela el cierre, la app sigue abierta
+
+        self.destroy()

@@ -9,6 +9,7 @@ from PIL import Image as ImagenPIL
 from functions.db import obtener_productos
 from functions.paths import obtener_carpeta_imgs
 from functions.logger import obtener_logger
+from functions.config import obtener_email_vendedor
 
 logger = obtener_logger()
 
@@ -20,7 +21,6 @@ COLOR_FONDO_BLANCO = "FFFFFF"
 
 # ---------- Textos editables ----------
 NOMBRE_EMPRESA = "MF Distribuidora"
-EMAIL_EMPRESA = "distribuidoramf@gmail.com"
 
 # ---------- Tamaños editables ----------
 TAMANO_IMAGEN_PX = 70   # tamaño del cuadrado de imagen dentro de la celda
@@ -101,7 +101,7 @@ def exportar_stock_excel(ruta_destino):
 
         hoja["B3"] = "Email:"
         hoja["B3"].font = Font(bold=True)
-        hoja["C3"] = EMAIL_EMPRESA
+        hoja["C3"] = obtener_email_vendedor()
 
         hoja[f"{col_fecha_label}3"] = "Fecha:"
         hoja[f"{col_fecha_label}3"].font = Font(bold=True)

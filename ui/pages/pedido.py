@@ -1,10 +1,10 @@
 import customtkinter as ctk
 from PIL import Image
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import os
 
 from functions.facturar import generar_factura_excel
-from functions.config import guardar_ruta_facturas, obtener_ruta_facturas, incrementar_remito, obtener_proximo_remito
+from functions.config import obtener_proximo_remito, establecer_proximo_remito
 from functions.db import obtener_producto, editar_producto
 from ui.components.toast import mostrar_toast
 from functions.paths import obtener_carpeta_imgs, hacer_backup_db
@@ -88,6 +88,10 @@ class PaginaPedido(ctk.CTkFrame):
         self._crear_totales()
         self._crear_boton_generar()
 
+        self._actualizar_lista()
+
+    def al_mostrar(self):
+        """Se llama cada vez que esta página se vuelve visible."""
         self._actualizar_lista()
 
     # ------------------------------------------------------------------
@@ -288,10 +292,6 @@ class PaginaPedido(ctk.CTkFrame):
         ).pack(side="right")
 
     def _actualizar_totales(self):
-        """
-        Recalcula los totales y redibuja el bloque completo, mostrando
-        solo las filas de Descuento y Deuda si tienen un valor mayor a 0.
-        """
         for widget in self.contenedor_totales.winfo_children():
             widget.destroy()
 
@@ -355,14 +355,30 @@ class PaginaPedido(ctk.CTkFrame):
         except ValueError:
             deuda = 0
 
-        carpeta_sugerida = obtener_ruta_facturas()
+        # Verifica que haya stock suficiente para cada producto del pedido
+        productos_insuficientes = []
+        for item in items:
+            producto = obtener_producto(codigo=item["codigo"])
+            if producto and item["cantidad"] > producto["cantidad_stock"]:
+                productos_insuficientes.append(
+                    f"{item['descripcion']} (pedís {item['cantidad']}, hay {producto['cantidad_stock']})"
+                )
+
+        if productos_insuficientes:
+            mensaje = "Stock insuficiente:\n" + "\n".join(productos_insuficientes)
+            confirmar = messagebox.askyesno(
+                "Stock insuficiente",
+                f"{mensaje}\n\n¿Querés continuar igual?"
+            )
+            if not confirmar:
+                return
+
         nombre_sugerido = f"R-{remito}_{cliente or 'cliente'}.xlsx".replace(" ", "_")
 
         ruta = filedialog.asksaveasfilename(
             title="Guardar factura",
             defaultextension=".xlsx",
             filetypes=[("Archivo Excel", "*.xlsx")],
-            initialdir=carpeta_sugerida,
             initialfile=nombre_sugerido
         )
 
@@ -378,9 +394,6 @@ class PaginaPedido(ctk.CTkFrame):
             mostrar_toast(self, "No se pudo generar la factura.", tipo="error")
             return
 
-        # Guarda la carpeta usada como preferida para la próxima vez
-        guardar_ruta_facturas(os.path.dirname(ruta))
-
         # Descuenta del stock lo vendido en esta factura
         for item in items:
             producto = obtener_producto(codigo=item["codigo"])
@@ -392,7 +405,7 @@ class PaginaPedido(ctk.CTkFrame):
 
         # Limpia el carrito y sube el número de remito
         carrito.limpiar_carrito()
-        incrementar_remito()
+        establecer_proximo_remito(int(remito))
 
         self.entry_remito.delete(0, "end")
         self.entry_remito.insert(0, str(obtener_proximo_remito()))

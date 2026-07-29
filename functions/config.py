@@ -1,18 +1,9 @@
-"""
-functions/config.py
-
-Guarda configuración simple y persistente de la app (por ahora, solo
-el próximo número de remito) en un archivo config.json dentro de la
-carpeta de datos de la app.
-"""
-
 import json
 
 from functions.paths import obtener_carpeta_app
 from functions.logger import obtener_logger
 
 logger = obtener_logger()
-
 
 def _obtener_ruta_config():
     """Devuelve la ruta al archivo config.json (mismo nivel que la carpeta db)."""
@@ -33,6 +24,15 @@ def _leer_config():
         logger.warning(f"No se pudo leer config.json, se usará configuración vacía: {e}")
         return {}
 
+def establecer_proximo_remito(numero_usado):
+    """
+    Guarda como próximo remito el número siguiente al que el usuario
+    efectivamente usó en la factura (numero_usado + 1), sin importar
+    cuál era el valor guardado antes.
+    """
+    config = _leer_config()
+    config["proximo_remito"] = numero_usado + 1
+    _guardar_config(config)
 
 def _guardar_config(config):
     """Sobreescribe el archivo config.json con el diccionario dado."""
@@ -48,18 +48,6 @@ def obtener_proximo_remito():
     """
     config = _leer_config()
     return config.get("proximo_remito", 1)
-
-
-def incrementar_remito():
-    """
-    Suma 1 al número de remito guardado y lo persiste. Se llama cuando
-    se confirma/exporta un pedido, para que el próximo ya venga
-    autocompletado con el siguiente número.
-    """
-    config = _leer_config()
-    actual = config.get("proximo_remito", 1)
-    config["proximo_remito"] = actual + 1
-    _guardar_config(config)
 
 def obtener_ruta_facturas():
     """
@@ -82,4 +70,27 @@ def guardar_ruta_facturas(ruta):
     """Guarda la carpeta elegida por el usuario para futuras facturas."""
     config = _leer_config()
     config["ruta_facturas"] = ruta
+    _guardar_config(config)
+
+def obtener_email_vendedor():
+    """Devuelve el email configurado para mostrar en las exportaciones."""
+    config = _leer_config()
+    return config.get("email_vendedor", "distribuidoramf@gmail.com")
+
+
+def guardar_email_vendedor(email):
+    config = _leer_config()
+    config["email_vendedor"] = email
+    _guardar_config(config)
+
+
+def obtener_productos_por_pagina():
+    """Cantidad de productos a mostrar por página en Stock."""
+    config = _leer_config()
+    return config.get("productos_por_pagina", 20)
+
+
+def guardar_productos_por_pagina(cantidad):
+    config = _leer_config()
+    config["productos_por_pagina"] = cantidad
     _guardar_config(config)

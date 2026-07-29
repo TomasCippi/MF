@@ -9,19 +9,11 @@ COLOR_HOVER = "#3a3a3a"
 COLOR_TRANSPARENTE = "transparent"
 COLOR_TEXTO = "#ffffff"
 
-# Ruta base de los íconos
-RUTA_ICONS = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "assets", "icons"
-)
+from functions.paths import obtener_ruta_assets
+RUTA_ICONS = os.path.join(obtener_ruta_assets(), "icons")
 
 
 class TopBar(ctk.CTkFrame):
-    """
-    Barra de navegación superior. Muestra un botón por cada página
-    (Stock, Pedido, Configuración, Información) y resalta el activo.
-    """
-
     def __init__(self, master, on_navegar, pagina_inicial="stock"):
         """
         master: widget padre

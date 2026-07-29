@@ -5,37 +5,46 @@ import gzip
 from datetime import datetime
 from pathlib import Path
 
+def obtener_ruta_assets():
+    """
+    Devuelve la ruta a la carpeta 'assets', tanto si la app corre como
+    script normal (desarrollo) como si corre empaquetada con PyInstaller
+    en modo --onefile (donde los archivos se extraen a una carpeta
+    temporal indicada en sys._MEIPASS).
+    """
+    if getattr(sys, "frozen", False):
+        # Corriendo como .exe empaquetado
+        base = sys._MEIPASS
+    else:
+        # Corriendo como script normal: la raíz del proyecto es un
+        # nivel arriba de la carpeta 'functions'
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    return os.path.join(base, "assets")
+
 def obtener_carpeta_app():
     """
     Determina la carpeta donde se guardarán los datos de la app
     según el sistema operativo, y la crea si no existe.
 
-    - En Windows: %APPDATA%\\mf-app\\db
+    - En Windows: Documentos\\mf-app\\db
     - En Linux:   ~/.local/share/mf-app/db
 
     Devuelve un objeto Path apuntando a la carpeta 'db'.
     """
-    sistema = sys.platform  # Detecta el sistema operativo actual
+    sistema = sys.platform
 
     if sistema.startswith("win"):
-        # En Windows, usamos la variable de entorno APPDATA
-        base = os.getenv("APPDATA")
-        if not base:
-            # Si por algún motivo no existe APPDATA, usamos la carpeta home como respaldo
-            base = str(Path.home())
-        carpeta_app = Path(base) / "mf-app"
+        # En Windows, usamos la carpeta de Documentos del usuario,
+        # que es visible y accesible sin restricciones raras
+        carpeta_app = Path.home() / "Documents" / "mf-app"
     else:
-        # En Linux (y sistemas tipo Unix), usamos el estándar XDG
         carpeta_app = Path.home() / ".local" / "share" / "mf-app"
 
     carpeta_db = carpeta_app / "db"
-
-    # Crea la carpeta (y todas las carpetas padre necesarias) si no existen.
-    # exist_ok=True evita que tire error si ya existe.
     carpeta_db.mkdir(parents=True, exist_ok=True)
 
     return carpeta_db
-
 
 def obtener_ruta_db():
     """

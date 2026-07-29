@@ -7,6 +7,7 @@ from datetime import datetime
 
 from functions.exportar_lista import exportar_stock_excel
 from functions.db import obtener_productos
+from functions.config import obtener_productos_por_pagina
 from ui.pages.agregar_producto import VentanaAgregarProducto
 from ui.components.fila_producto import FilaProducto
 from ui.pages.confirmar_eliminar import VentanaConfirmarEliminar
@@ -24,12 +25,13 @@ COLOR_HOVER = "#5aa5dd"
 
 RUTA_ICONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "icons")
 
-PRODUCTOS_POR_PAGINA = 10
 RETRASO_BUSQUEDA_MS = 0
 
 
 class PaginaStock(ctk.CTkFrame):
     def __init__(self, master):
+        global PRODUCTOS_POR_PAGINA
+        PRODUCTOS_POR_PAGINA = obtener_productos_por_pagina()
         super().__init__(master, fg_color=COLOR_FONDO)
 
         self.todos_los_productos = []
