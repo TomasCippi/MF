@@ -34,7 +34,7 @@ class PaginaInformacion(ctk.CTkFrame):
         # Versión
         lbl_version = ctk.CTkLabel(
             tarjeta,
-            text="Versión 1.0.0",
+            text="Versión 1.0.1",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             text_color="gray50",
         )
