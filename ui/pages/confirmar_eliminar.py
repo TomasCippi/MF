@@ -9,7 +9,10 @@ de functions/db.py.
 
 import customtkinter as ctk
 from functions.db import eliminar_producto
+from functions.logger import obtener_logger
 from ui.components.toast import mostrar_toast
+
+logger = obtener_logger()
 
 # ---------- Colores ----------
 COLOR_FONDO = "#1a1a1a"
@@ -95,7 +98,13 @@ class VentanaConfirmarEliminar(ctk.CTkToplevel):
         un toast de confirmación y cierra la ventana.
         """
         nombre = self.producto.get("descripcion", "El producto")
-        eliminar_producto(codigo=self.producto.get("codigo"))
+
+        try:
+            eliminar_producto(codigo=self.producto.get("codigo"))
+        except Exception as e:
+            logger.error(f"Error inesperado al eliminar producto: {e}")
+            mostrar_toast(self, "Ocurrió un error inesperado al eliminar el producto.", tipo="error")
+            return
 
         if self.on_eliminado:
             self.on_eliminado()

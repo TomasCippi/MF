@@ -5,6 +5,7 @@ from functions.logger import obtener_logger
 
 logger = obtener_logger()
 
+
 def _obtener_ruta_config():
     """Devuelve la ruta al archivo config.json (mismo nivel que la carpeta db)."""
     carpeta_app = obtener_carpeta_app().parent
@@ -37,8 +38,12 @@ def establecer_proximo_remito(numero_usado):
 def _guardar_config(config):
     """Sobreescribe el archivo config.json con el diccionario dado."""
     ruta = _obtener_ruta_config()
-    with open(ruta, "w", encoding="utf-8") as archivo:
-        json.dump(config, archivo, indent=2)
+    try:
+        with open(ruta, "w", encoding="utf-8") as archivo:
+            json.dump(config, archivo, indent=2)
+    except Exception as e:
+        logger.error(f"No se pudo guardar config.json: {e}")
+        raise
 
 
 def obtener_proximo_remito():
@@ -83,6 +88,16 @@ def guardar_email_vendedor(email):
     config["email_vendedor"] = email
     _guardar_config(config)
 
+def obtener_direccion_empresa():
+    """Dirección que aparece en las facturas (arriba, junto al cliente)."""
+    config = _leer_config()
+    return config.get("direccion_empresa", "Llavallol 5470, C.A.B.A.")
+
+
+def guardar_direccion_empresa(direccion):
+    config = _leer_config()
+    config["direccion_empresa"] = direccion
+    _guardar_config(config)
 
 def obtener_productos_por_pagina():
     """Cantidad de productos a mostrar por página en Stock."""

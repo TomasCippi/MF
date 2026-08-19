@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import sqlite3
 import gzip
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +71,16 @@ def hacer_backup_db():
 
     if not ruta_db.exists():
         return  # no hay nada que respaldar todavía
+
+    # La base usa modo WAL (ver functions/db.py): los cambios recientes
+    # pueden estar todavía en el archivo -wal y no en el .db principal.
+    # Un checkpoint los vuelca al .db antes de copiarlo, para que el
+    # backup nunca quede con datos faltantes.
+    try:
+        with sqlite3.connect(str(ruta_db), timeout=10) as conexion:
+            conexion.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        pass  # si falla el checkpoint, igual intentamos el backup con lo que haya
 
     carpeta_app = obtener_carpeta_app().parent
     carpeta_backups = carpeta_app / "backups"

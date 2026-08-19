@@ -2,9 +2,13 @@ import customtkinter as ctk
 
 from functions.config import (
     obtener_email_vendedor, guardar_email_vendedor,
-    obtener_productos_por_pagina, guardar_productos_por_pagina
+    obtener_productos_por_pagina, guardar_productos_por_pagina,
+    obtener_direccion_empresa, guardar_direccion_empresa
 )
+from functions.logger import obtener_logger
 from ui.components.toast import mostrar_toast
+
+logger = obtener_logger()
 
 COLOR_FONDO = "#1a1a1a"
 COLOR_TEXTO = "#ffffff"
@@ -36,6 +40,19 @@ class PaginaConfiguracion(ctk.CTkFrame):
         )
         self.entry_email.pack(fill="x", padx=30, pady=(5, 20))
         self.entry_email.insert(0, obtener_email_vendedor())
+
+        # ---------- Dirección (aparece en las facturas) ----------
+        ctk.CTkLabel(
+            self, text="Dirección (aparece en las facturas)",
+            font=("Arial", 13), text_color=COLOR_TEXTO_SECUNDARIO
+        ).pack(anchor="w", padx=30)
+
+        self.entry_direccion = ctk.CTkEntry(
+            self, fg_color=COLOR_INPUT, border_color=COLOR_BORDE,
+            text_color=COLOR_TEXTO, height=38, corner_radius=0
+        )
+        self.entry_direccion.pack(fill="x", padx=30, pady=(5, 20))
+        self.entry_direccion.insert(0, obtener_direccion_empresa())
 
         # ---------- Cantidad de productos por página ----------
         ctk.CTkLabel(
@@ -71,17 +88,28 @@ class PaginaConfiguracion(ctk.CTkFrame):
 
     def _guardar(self):
         email = self.entry_email.get().strip()
+        direccion = self.entry_direccion.get().strip()
         cantidad_texto = self.entry_por_pagina.get().strip()
 
         if not email:
             mostrar_toast(self, "El email no puede estar vacío.", tipo="advertencia")
             return
 
+        if not direccion:
+            mostrar_toast(self, "La dirección no puede estar vacía.", tipo="advertencia")
+            return
+
         cantidad = int(cantidad_texto) if cantidad_texto else 20
         if cantidad < 1:
             cantidad = 1
 
-        guardar_email_vendedor(email)
-        guardar_productos_por_pagina(cantidad)
+        try:
+            guardar_email_vendedor(email)
+            guardar_direccion_empresa(direccion)
+            guardar_productos_por_pagina(cantidad)
+        except Exception as e:
+            logger.error(f"Error inesperado al guardar configuración: {e}")
+            mostrar_toast(self, "No se pudo guardar la configuración.", tipo="error")
+            return
 
         mostrar_toast(self, "Configuración guardada correctamente.", tipo="exito")

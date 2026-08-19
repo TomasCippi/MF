@@ -4,9 +4,12 @@ import customtkinter as ctk
 from tkinter import filedialog
 from PIL import Image
 
-from functions.db import insertar_producto, editar_producto
+from functions.db import insertar_producto, editar_producto, codigo_es_valido
 from functions.paths import obtener_carpeta_imgs
+from functions.logger import obtener_logger
 from ui.components.toast import mostrar_toast
+
+logger = obtener_logger()
 
 # ---------- Colores usados en esta ventana ----------
 COLOR_FONDO = "#1a1a1a"
@@ -269,6 +272,16 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
         if not codigo:
             self.entry_codigo.configure(border_color=COLOR_ERROR)
             hay_error = True
+        elif not codigo_es_valido(codigo):
+            # El código se usa para armar el nombre del archivo de imagen
+            # (ej: "ABC123.jpg"), así que no puede tener '/', '\', espacios
+            # ni otros caracteres que rompan una ruta de archivo.
+            self.entry_codigo.configure(border_color=COLOR_ERROR)
+            self.label_error.configure(
+                text="El código solo puede tener letras, números, '-' y '_'."
+            )
+            mostrar_toast(self, "El código solo puede tener letras, números, '-' y '_'.", tipo="advertencia")
+            return
 
         if not precio_texto:
             self.contenedor_precio.configure(border_color=COLOR_ERROR)
@@ -305,15 +318,20 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
             # ---------- Modo edición ----------
             imagen_anterior = self.producto.get("imagen")
 
-            exito = editar_producto(
-                id=self.producto["id"],
-                codigo=codigo,
-                descripcion=nombre,
-                precio=precio,
-                cantidad_caja=cantidad_caja,
-                cantidad_stock=cantidad_stock,
-                imagen=nombre_imagen_final
-            )
+            try:
+                exito = editar_producto(
+                    id=self.producto["id"],
+                    codigo=codigo,
+                    descripcion=nombre,
+                    precio=precio,
+                    cantidad_caja=cantidad_caja,
+                    cantidad_stock=cantidad_stock,
+                    imagen=nombre_imagen_final
+                )
+            except Exception as e:
+                logger.error(f"Error inesperado al editar producto: {e}")
+                mostrar_toast(self, "Ocurrió un error inesperado al editar el producto.", tipo="error")
+                return
 
             if not exito:
                 self.entry_codigo.configure(border_color=COLOR_ERROR)
@@ -351,14 +369,19 @@ class VentanaAgregarProducto(ctk.CTkToplevel):
 
         else:
             # ---------- Modo agregar ----------
-            nuevo_id = insertar_producto(
-                codigo=codigo,
-                descripcion=nombre,
-                precio=precio,
-                cantidad_caja=cantidad_caja,
-                cantidad_stock=cantidad_stock,
-                imagen=nombre_imagen_final
-            )
+            try:
+                nuevo_id = insertar_producto(
+                    codigo=codigo,
+                    descripcion=nombre,
+                    precio=precio,
+                    cantidad_caja=cantidad_caja,
+                    cantidad_stock=cantidad_stock,
+                    imagen=nombre_imagen_final
+                )
+            except Exception as e:
+                logger.error(f"Error inesperado al insertar producto: {e}")
+                mostrar_toast(self, "Ocurrió un error inesperado al guardar el producto.", tipo="error")
+                return
 
             if nuevo_id is None:
                 self.entry_codigo.configure(border_color=COLOR_ERROR)

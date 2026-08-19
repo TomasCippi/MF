@@ -194,6 +194,9 @@ class PaginaStock(ctk.CTkFrame):
             self.todos_los_productos = obtener_productos()
         except Exception:
             self.todos_los_productos = []
+            mostrar_toast(
+                self, "No se pudo cargar el stock. Revisá el archivo de log.", tipo="error"
+            )
 
         self.productos_filtrados = self.todos_los_productos
         self.pagina_actual = 1

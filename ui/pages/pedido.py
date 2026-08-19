@@ -6,9 +6,12 @@ import os
 from functions.facturar import generar_factura_excel
 from functions.config import obtener_proximo_remito, establecer_proximo_remito
 from functions.db import obtener_producto, editar_producto
+from functions.logger import obtener_logger
 from ui.components.toast import mostrar_toast
 from functions.paths import obtener_carpeta_imgs, hacer_backup_db
 from functions import carrito
+
+logger = obtener_logger()
 
 COLOR_FONDO = "#1a1a1a"
 COLOR_FILA = "#242424"
@@ -356,13 +359,18 @@ class PaginaPedido(ctk.CTkFrame):
             deuda = 0
 
         # Verifica que haya stock suficiente para cada producto del pedido
-        productos_insuficientes = []
-        for item in items:
-            producto = obtener_producto(codigo=item["codigo"])
-            if producto and item["cantidad"] > producto["cantidad_stock"]:
-                productos_insuficientes.append(
-                    f"{item['descripcion']} (pedís {item['cantidad']}, hay {producto['cantidad_stock']})"
-                )
+        try:
+            productos_insuficientes = []
+            for item in items:
+                producto = obtener_producto(codigo=item["codigo"])
+                if producto and item["cantidad"] > producto["cantidad_stock"]:
+                    productos_insuficientes.append(
+                        f"{item['descripcion']} (pedís {item['cantidad']}, hay {producto['cantidad_stock']})"
+                    )
+        except Exception as e:
+            logger.error(f"Error inesperado al verificar stock antes de facturar: {e}")
+            mostrar_toast(self, "No se pudo verificar el stock disponible.", tipo="error")
+            return
 
         if productos_insuficientes:
             mensaje = "Stock insuficiente:\n" + "\n".join(productos_insuficientes)
@@ -394,14 +402,25 @@ class PaginaPedido(ctk.CTkFrame):
             mostrar_toast(self, "No se pudo generar la factura.", tipo="error")
             return
 
-        # Descuenta del stock lo vendido en esta factura
-        for item in items:
-            producto = obtener_producto(codigo=item["codigo"])
-            if producto:
-                nuevo_stock = max(0, producto["cantidad_stock"] - item["cantidad"])
-                editar_producto(id=producto["id"], cantidad_stock=nuevo_stock)
+        # Descuenta del stock lo vendido en esta factura. La factura ya se
+        # generó y se guardó en disco en este punto, así que si algo falla
+        # acá solo avisamos: no queremos que el usuario pierda la factura
+        # ya generada por un error al actualizar el stock.
+        try:
+            for item in items:
+                producto = obtener_producto(codigo=item["codigo"])
+                if producto:
+                    nuevo_stock = max(0, producto["cantidad_stock"] - item["cantidad"])
+                    editar_producto(id=producto["id"], cantidad_stock=nuevo_stock)
 
-        hacer_backup_db()
+            hacer_backup_db()
+        except Exception as e:
+            logger.error(f"Factura generada, pero falló al descontar stock: {e}")
+            mostrar_toast(
+                self,
+                "La factura se generó, pero no se pudo actualizar el stock. Revisalo manualmente.",
+                tipo="advertencia"
+            )
 
         # Limpia el carrito y sube el número de remito
         carrito.limpiar_carrito()

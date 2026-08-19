@@ -3,6 +3,9 @@ import customtkinter as ctk
 from tkinter import filedialog
 
 from functions.db import cargar_productos_excel
+from functions.logger import obtener_logger
+
+logger = obtener_logger()
 
 # ---------- Colores ----------
 COLOR_FONDO = "#1a1a1a"
@@ -147,7 +150,17 @@ class VentanaSubirMasivo(ctk.CTkToplevel):
         (que puede tardar un momento) y después programa que el resultado
         se muestre en el hilo principal de la interfaz (con 'after').
         """
-        resultado = cargar_productos_excel(self.ruta_archivo)
+        try:
+            resultado = cargar_productos_excel(self.ruta_archivo)
+        except Exception as e:
+            logger.error(f"Error inesperado durante la carga masiva: {e}")
+            resultado = {
+                "exito": False,
+                "errores": [f"Ocurrió un error inesperado al procesar el archivo: {e}"],
+                "duplicados": [],
+                "insertados": 0,
+            }
+
         self.after(0, lambda: self._mostrar_resultado(resultado))
 
     def _mostrar_resultado(self, resultado):

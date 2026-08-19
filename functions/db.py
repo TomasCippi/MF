@@ -1,26 +1,45 @@
+import re
 import sqlite3
 from openpyxl import load_workbook
 
 from functions.paths import obtener_ruta_db, hacer_backup_db, obtener_carpeta_imgs
-from functions.logger import obtener_logger      
-import time
+from functions.logger import obtener_logger
 
 logger = obtener_logger()
 
+# Códigos de producto: solo letras, números, guiones y guión bajo.
+# Esto evita que un código con '/', '\' o '..' termine convirtiéndose
+# en una ruta de archivo peligrosa (path traversal) al armar el nombre
+# de la imagen (ej: f"{codigo}.jpg" en ui/pages/agregar_producto.py).
+_PATRON_CODIGO_VALIDO = re.compile(r"^[A-Za-z0-9_\-]+$")
 
-def _cargar_productos(self):
-    t0 = time.time()
-    try:
-        self.todos_los_productos = obtener_productos()
-    except Exception:
-        self.todos_los_productos = []
-    print(f"obtener_productos: {time.time() - t0:.3f}s")
 
-    t1 = time.time()
-    self.productos_filtrados = self.todos_los_productos
-    self.pagina_actual = 1
-    self._actualizar_vista()
-    print(f"actualizar_vista: {time.time() - t1:.3f}s")
+def codigo_es_valido(codigo):
+    """
+    Valida que un código de producto sea seguro para usarse como parte
+    de un nombre de archivo (imágenes) y no contenga caracteres raros.
+    """
+    return bool(codigo) and bool(_PATRON_CODIGO_VALIDO.match(codigo))
+
+
+def _conectar(ruta_db):
+    """
+    Abre una conexión a la base de datos con configuración pensada para
+    que dure años instalada sin corromperse:
+    - WAL: si la app se cierra de golpe (corte de luz, apagado forzado
+      de Windows) a mitad de una escritura, SQLite puede recuperarse
+      solo al reabrir, en vez de quedar corrupta.
+    - busy_timeout: si algo más tiene el archivo bloqueado un instante
+      (por ejemplo un backup o un antivirus escaneándolo), espera en
+      vez de tirar "database is locked" de una.
+    """
+    conexion = sqlite3.connect(str(ruta_db), timeout=10)
+    conexion.execute("PRAGMA journal_mode=WAL")
+    conexion.execute("PRAGMA busy_timeout=10000")
+    conexion.execute("PRAGMA foreign_keys=ON")
+    return conexion
+
+
 # ---------- Inicialización ----------
 
 def crear_tablas():
@@ -31,7 +50,7 @@ def crear_tablas():
 
     try:
         # 'with' asegura que la conexión se cierre sola, incluso si hay un error
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             cursor = conexion.cursor()
 
             # Verificamos si la tabla ya existía ANTES de crearla,
@@ -56,9 +75,9 @@ def crear_tablas():
             conexion.commit()
 
         if ya_existia:
-            print("La tabla 'stock' ya existía. No se realizaron cambios.")
+            logger.info("La tabla 'stock' ya existía. No se realizaron cambios.")
         else:
-            print("Tabla 'stock' creada correctamente.")
+            logger.info("Tabla 'stock' creada correctamente.")
 
     except sqlite3.Error as e:
         # Error específico de SQLite (por ejemplo, base de datos corrupta)
@@ -78,7 +97,6 @@ def inicializar_db():
     try:
         crear_tablas()
         hacer_backup_db()
-        print(f"Base de datos lista en: {obtener_ruta_db()}")
     except Exception as e:
         logger.critical(f"No se pudo inicializar la base de datos: {e}")
         raise
@@ -94,7 +112,7 @@ def obtener_productos():
     ruta_db = obtener_ruta_db()
 
     try:
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             conexion.row_factory = sqlite3.Row  # permite acceder a las columnas por nombre
             cursor = conexion.cursor()
             cursor.execute("SELECT * FROM stock ORDER BY id")
@@ -119,13 +137,12 @@ def obtener_producto(id=None, codigo=None):
     """
     if id is None and codigo is None:
         logger.warning("Se llamó a obtener_producto sin especificar id ni codigo.")
-        print("Error: hay que especificar 'id' o 'codigo' para buscar un producto.")
         return None
 
     ruta_db = obtener_ruta_db()
 
     try:
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             conexion.row_factory = sqlite3.Row
             cursor = conexion.cursor()
 
@@ -161,17 +178,20 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
     if imagen is None:
         imagen = "default.png"
 
+    if not codigo_es_valido(codigo):
+        logger.warning(f"Código inválido al insertar producto: '{codigo}'.")
+        return None
+
     try:
         _validar_datos_producto(precio, cantidad_caja, cantidad_stock)
     except ValueError as e:
         logger.warning(f"Datos inválidos al insertar producto '{codigo}': {e}")
-        print(f"Error: {e}")
         return None
 
     ruta_db = obtener_ruta_db()
 
     try:
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             cursor = conexion.cursor()
             cursor.execute("""
                 INSERT INTO stock (codigo, descripcion, precio, cantidad_caja, cantidad_stock, imagen)
@@ -180,8 +200,7 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
             conexion.commit()
             nuevo_id = cursor.lastrowid
 
-        logger.warning(f"Producto creado: codigo='{codigo}', id={nuevo_id}.")
-        print(f"Producto '{codigo}' insertado correctamente (id={nuevo_id}).")
+        logger.info(f"Producto creado: codigo='{codigo}', id={nuevo_id}.")
 
         if hacer_backup:
             hacer_backup_db()
@@ -190,7 +209,6 @@ def insertar_producto(codigo, descripcion, precio, cantidad_caja=1, cantidad_sto
 
     except sqlite3.IntegrityError:
         logger.warning(f"No se pudo insertar el producto: el código '{codigo}' ya existe.")
-        print(f"Error: el código '{codigo}' ya existe.")
         return None
     except sqlite3.Error as e:
         logger.error(f"Error al insertar producto '{codigo}': {e}")
@@ -212,16 +230,18 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
 
     campos_a_actualizar = {k: v for k, v in campos.items() if v is not None}
 
+    if codigo is not None and not codigo_es_valido(codigo):
+        logger.warning(f"Código inválido al editar producto (id={id}): '{codigo}'.")
+        return False
+
     try:
         _validar_datos_producto(precio, cantidad_caja, cantidad_stock)
     except ValueError as e:
         logger.warning(f"Datos inválidos al editar producto (id={id}): {e}")
-        print(f"Error: {e}")
         return False
 
     if not campos_a_actualizar:
         logger.warning(f"Se llamó a editar_producto (id={id}) sin especificar campos a modificar.")
-        print("Error: no se especificó ningún campo para editar.")
         return False
 
     # Arma dinámicamente algo como: "codigo = ?, precio = ?"
@@ -232,7 +252,7 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
     ruta_db = obtener_ruta_db()
 
     try:
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             cursor = conexion.cursor()
             # Los nombres de columna vienen de nuestro propio diccionario fijo
             # (no de datos del usuario), así que es seguro armar el SQL así.
@@ -245,18 +265,15 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
 
         if filas_afectadas == 0:
             logger.warning(f"No se encontró producto para editar (id={id}).")
-            print("No se encontró ningún producto con ese id.")
             return False
         else:
-            logger.warning(f"Producto editado (id={id}): campos modificados: {list(campos_a_actualizar.keys())}.")
-            print("Producto editado correctamente.")
+            logger.info(f"Producto editado (id={id}): campos modificados: {list(campos_a_actualizar.keys())}.")
             hacer_backup_db()
             return True
 
     except sqlite3.IntegrityError:
         # Salta si el nuevo 'codigo' ya lo tiene otro producto
         logger.warning(f"No se pudo editar el producto (id={id}): el código '{codigo}' ya existe en otro producto.")
-        print(f"Error: el código '{codigo}' ya existe en otro producto.")
         return False
     except sqlite3.Error as e:
         logger.error(f"Error al editar producto (id={id}): {e}")
@@ -269,7 +286,6 @@ def editar_producto(id, codigo=None, descripcion=None, precio=None, cantidad_caj
 def eliminar_producto(id=None, codigo=None):
     if id is None and codigo is None:
         logger.warning("Se llamó a eliminar_producto sin especificar id ni codigo.")
-        print("Error: hay que especificar 'id' o 'codigo' para eliminar un producto.")
         return False
 
     # Primero buscamos el producto, para saber qué imagen tenía ANTES de borrarlo
@@ -277,13 +293,12 @@ def eliminar_producto(id=None, codigo=None):
 
     if producto is None:
         logger.warning(f"No se encontró producto para eliminar (id={id}, codigo={codigo}).")
-        print("No se encontró ningún producto con esos datos.")
         return False
 
     ruta_db = obtener_ruta_db()
 
     try:
-        with sqlite3.connect(str(ruta_db)) as conexion:
+        with _conectar(ruta_db) as conexion:
             cursor = conexion.cursor()
 
             if id is not None:
@@ -296,7 +311,6 @@ def eliminar_producto(id=None, codigo=None):
 
         if filas_afectadas == 0:
             logger.warning(f"No se encontró producto para eliminar (id={id}, codigo={codigo}).")
-            print("No se encontró ningún producto con esos datos.")
             return False
 
         # ---------- Borrar la imagen del producto, si tenía una propia ----------
@@ -306,14 +320,13 @@ def eliminar_producto(id=None, codigo=None):
                 ruta_imagen = obtener_carpeta_imgs() / nombre_imagen
                 if ruta_imagen.exists():
                     ruta_imagen.unlink()
-                    logger.warning(f"Imagen '{nombre_imagen}' eliminada junto con el producto.")
+                    logger.info(f"Imagen '{nombre_imagen}' eliminada junto con el producto.")
             except Exception as e:
                 # Si falla borrar la imagen, no revertimos el borrado del producto,
                 # pero sí lo dejamos registrado como advertencia.
                 logger.warning(f"El producto se eliminó, pero no se pudo borrar su imagen '{nombre_imagen}': {e}")
 
-        logger.warning(f"Producto eliminado (id={id}, codigo={codigo}).")
-        print("Producto eliminado correctamente.")
+        logger.info(f"Producto eliminado (id={id}, codigo={codigo}).")
         hacer_backup_db()
         return True
 
@@ -402,6 +415,11 @@ def cargar_productos_excel(ruta_archivo):
             errores_fila.append(f"Fila {fila_num}, columna 'codigo': está vacío.")
         else:
             codigo = str(codigo).strip()
+            if not codigo_es_valido(codigo):
+                errores_fila.append(
+                    f"Fila {fila_num}, columna 'codigo': solo se permiten letras, números, "
+                    f"'-' y '_' (código inválido: '{codigo}')."
+                )
 
         # --- descripcion ---
         descripcion = fila[indices_columnas["descripcion"]]
@@ -500,7 +518,7 @@ def cargar_productos_excel(ruta_archivo):
         resultado["exito"] = True
         resultado["insertados"] = len(productos)
 
-        logger.warning(
+        logger.info(
             f"Carga masiva desde '{ruta_archivo}' completada: {len(productos)} producto(s) insertado(s), "
             f"{len(resultado['duplicados'])} duplicado(s) descartado(s)."
         )

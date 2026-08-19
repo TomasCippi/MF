@@ -2,10 +2,10 @@
 functions/facturar.py
 
 Genera la factura del pedido como Excel, con el formato de la planilla
-en papel: PRESUPUESTO/cliente, R-remito/fecha, tabla de artículos,
-totales con descuento y deuda. Se imprimen DOS copias en la misma
-hoja (vendedor arriba, cliente abajo), separadas por una línea gruesa,
-pensada para entrar en A4 al imprimir.
+en papel: PRESUPUESTO/cliente, DIRECCION, R-remito/fecha, tabla de
+artículos, totales con descuento y deuda. Se imprimen DOS copias en la
+misma hoja (vendedor arriba, cliente abajo), separadas por una línea
+gruesa, pensada para entrar en A4 al imprimir.
 """
 
 from datetime import datetime
@@ -15,6 +15,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.worksheet.page import PageMargins
 
 from functions.logger import obtener_logger
+from functions.config import obtener_direccion_empresa
 
 logger = obtener_logger()
 
@@ -55,9 +56,10 @@ def generar_factura_excel(ruta_destino, cliente, remito, items, porcentaje_descu
         total_final = subtotal - monto_descuento + (deuda or 0)
 
         fecha = datetime.now().strftime("%d-%m-%y")
+        direccion = obtener_direccion_empresa()
 
         ultima_fila_copia_1 = _dibujar_copia(
-            hoja, 1, cliente, remito, fecha, items,
+            hoja, 1, cliente, remito, fecha, direccion, items,
             subtotal, monto_descuento, porcentaje_descuento, deuda, total_final
         )
 
@@ -71,7 +73,7 @@ def generar_factura_excel(ruta_destino, cliente, remito, items, porcentaje_descu
         inicio_copia_2 = fila_separador + 2
         hoja.row_dimensions[fila_separador + 1].height = 18  # espacio en blanco después de la línea
         ultima_fila_copia_2 = _dibujar_copia(
-            hoja, inicio_copia_2, cliente, remito, fecha, items,
+            hoja, inicio_copia_2, cliente, remito, fecha, direccion, items,
             subtotal, monto_descuento, porcentaje_descuento, deuda, total_final
         )
 
@@ -85,7 +87,7 @@ def generar_factura_excel(ruta_destino, cliente, remito, items, porcentaje_descu
         hoja.page_margins = PageMargins(left=0.3, right=0.3, top=0.3, bottom=0.3)
 
         libro.save(ruta_destino)
-        logger.warning(f"Factura generada en '{ruta_destino}' (remito {remito}, cliente '{cliente}').")
+        logger.info(f"Factura generada en '{ruta_destino}' (remito {remito}, cliente '{cliente}').")
         return True
 
     except Exception as e:
@@ -93,17 +95,15 @@ def generar_factura_excel(ruta_destino, cliente, remito, items, porcentaje_descu
         return False
 
 
-def _dibujar_copia(hoja, fila_inicio, cliente, remito, fecha, items,
+def _dibujar_copia(hoja, fila_inicio, cliente, remito, fecha, direccion, items,
                     subtotal, monto_descuento, porcentaje_descuento, deuda, total_final):
     """
-    Dibuja un bloque completo de factura (encabezado + tabla + totales)
-    empezando en 'fila_inicio'. Devuelve la última fila que ocupó.
+    Dibuja un bloque completo de factura (encabezado + dirección + tabla
+    + totales) empezando en 'fila_inicio'. Devuelve la última fila que ocupó.
     """
     fila = fila_inicio
 
     # ---------- Fila 1: PRESUPUESTO | Cliente (centrado, gris) | R-remito | Fecha ----------
-    # Fondo blanco y letra negra en toda la fila, salvo el nombre del
-    # cliente que lleva fondo gris claro.
     celda_label = hoja.cell(row=fila, column=1, value="PRESUPUESTO")
     celda_label.font = Font(bold=True, size=11, color=COLOR_NEGRO)
     celda_label.fill = PatternFill("solid", fgColor=COLOR_BLANCO)
@@ -132,7 +132,29 @@ def _dibujar_copia(hoja, fila_inicio, cliente, remito, fecha, items,
     hoja.row_dimensions[fila].height = 24
     fila += 1
 
-    # ---------- Fila 2: encabezados de la tabla, fondo negro / letra blanca ----------
+    # ---------- Fila 2: DIRECCION | dirección (B:C) | vacío | vacío, todo con fondo gris ----------
+    celda_label_dir = hoja.cell(row=fila, column=1, value="DIRECCION")
+    celda_label_dir.font = Font(bold=True, size=11, color=COLOR_NEGRO)
+    celda_label_dir.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+    celda_label_dir.alignment = Alignment(horizontal="center", vertical="center")
+
+    hoja.merge_cells(start_row=fila, start_column=2, end_row=fila, end_column=3)
+    celda_direccion = hoja.cell(row=fila, column=2, value=direccion or "-")
+    celda_direccion.font = Font(bold=False, size=11, color=COLOR_NEGRO)
+    celda_direccion.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+    celda_direccion.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    hoja.cell(row=fila, column=3).fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+
+    hoja.cell(row=fila, column=4).fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+    hoja.cell(row=fila, column=5).fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+
+    for col_idx in range(1, 6):
+        hoja.cell(row=fila, column=col_idx).border = BORDE_CELDA
+
+    hoja.row_dimensions[fila].height = 22
+    fila += 1
+
+    # ---------- Encabezados de la tabla, fondo negro / letra blanca ----------
     encabezados = ["Artículo", "Descripción", "Cantidad", "Precio", "Total"]
     for col_idx, texto in enumerate(encabezados, start=1):
         celda = hoja.cell(row=fila, column=col_idx, value=texto)
@@ -160,14 +182,12 @@ def _dibujar_copia(hoja, fila_inicio, cliente, remito, fecha, items,
             celda.border = BORDE_CELDA
 
             if col_idx == 1:
-                # Columna Artículo: fondo gris claro siempre, tenga o no código
                 celda.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
                 celda.font = Font(bold=True, size=10)
                 celda.alignment = Alignment(horizontal="center", vertical="center")
             elif col_idx == 2:
                 celda.alignment = Alignment(horizontal="left", vertical="center")
             elif col_idx == 3:
-                # Cantidad: letra más gorda
                 celda.font = Font(bold=True, size=11)
                 celda.alignment = Alignment(horizontal="center", vertical="center")
             else:
@@ -203,11 +223,38 @@ def _dibujar_copia(hoja, fila_inicio, cliente, remito, fecha, items,
     _fila_total("TOTAL", subtotal)
 
     if monto_descuento > 0:
-        _fila_total(f"DESCUENTO ({porcentaje_descuento:g}%)", -monto_descuento)
+        # ---------- Fila de descuento: A y B vacíos (gris), C = "Descuento",
+        # D = porcentaje (10%, 15%, etc.), E = monto descontado en $ ----------
+        for col_idx in range(1, 3):
+            celda_vacia = hoja.cell(row=fila, column=col_idx)
+            celda_vacia.border = BORDE_CELDA
+            celda_vacia.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+
+        celda_label_desc = hoja.cell(row=fila, column=3, value="Descuento")
+        celda_label_desc.font = Font(bold=True, size=11, color=COLOR_NEGRO)
+        celda_label_desc.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+        celda_label_desc.border = BORDE_CELDA
+        celda_label_desc.alignment = Alignment(horizontal="right", vertical="center")
+
+        celda_porcentaje = hoja.cell(row=fila, column=4, value=f"{porcentaje_descuento:g}%")
+        celda_porcentaje.font = Font(bold=True, size=11, color=COLOR_NEGRO)
+        celda_porcentaje.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+        celda_porcentaje.border = BORDE_CELDA
+        celda_porcentaje.alignment = Alignment(horizontal="center", vertical="center")
+
+        celda_monto_desc = hoja.cell(row=fila, column=5, value=monto_descuento)
+        celda_monto_desc.font = Font(bold=True, size=11, color=COLOR_NEGRO)
+        celda_monto_desc.fill = PatternFill("solid", fgColor=COLOR_GRIS_CLARO)
+        celda_monto_desc.number_format = '"$"#,##0.00'
+        celda_monto_desc.border = BORDE_CELDA
+        celda_monto_desc.alignment = Alignment(horizontal="center", vertical="center")
+
+        hoja.row_dimensions[fila].height = 20
+        fila += 1
 
     if deuda and deuda > 0:
-        _fila_total("LO QUE DEBÍA", deuda)
+        _fila_total("SALDO ANTERIOR", deuda)
 
-    _fila_total("SUBTOTAL", total_final, tamano=13)
+    _fila_total("SALDO ACTUAL", total_final, tamano=13)
 
     return fila - 1
