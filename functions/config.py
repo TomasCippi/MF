@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 
 from functions.paths import obtener_carpeta_app
 from functions.logger import obtener_logger
@@ -13,7 +15,11 @@ def _obtener_ruta_config():
 
 
 def _leer_config():
-    """Lee el archivo config.json. Si no existe, devuelve un diccionario vacío."""
+    """
+    Lee el archivo config.json. Si no existe, devuelve un diccionario vacío.
+    Si existe pero está roto, guarda una copia como config.json.corrupto
+    (para no perder lo que tenía) y devuelve un diccionario vacío.
+    """
     ruta = _obtener_ruta_config()
     if not ruta.exists():
         return {}
@@ -23,7 +29,42 @@ def _leer_config():
             return json.load(archivo)
     except Exception as e:
         logger.warning(f"No se pudo leer config.json, se usará configuración vacía: {e}")
+        try:
+            shutil.copy2(ruta, ruta.parent / "config.json.corrupto")
+        except Exception as e_copia:
+            logger.warning(f"Tampoco se pudo copiar el config.json dañado: {e_copia}")
         return {}
+
+
+def _guardar_config(config):
+    """
+    Guarda el diccionario en config.json. Escribe primero a un archivo
+    temporal y después lo reemplaza, así si la app se corta a mitad de
+    la escritura el config.json anterior queda intacto.
+    """
+    ruta = _obtener_ruta_config()
+    temporal = ruta.parent / (ruta.name + ".tmp")
+    try:
+        with open(temporal, "w", encoding="utf-8") as archivo:
+            json.dump(config, archivo, indent=2)
+            archivo.flush()
+            os.fsync(archivo.fileno())
+        os.replace(temporal, ruta)
+    except Exception as e:
+        logger.error(f"No se pudo guardar config.json: {e}")
+        raise
+
+
+# ---------- Remito ----------
+
+def obtener_proximo_remito():
+    """
+    Devuelve el próximo número de remito a usar (empieza en 1 si nunca
+    se guardó nada todavía). No modifica nada, solo lee.
+    """
+    config = _leer_config()
+    return config.get("proximo_remito", 1)
+
 
 def establecer_proximo_remito(numero_usado):
     """
@@ -35,24 +76,8 @@ def establecer_proximo_remito(numero_usado):
     config["proximo_remito"] = numero_usado + 1
     _guardar_config(config)
 
-def _guardar_config(config):
-    """Sobreescribe el archivo config.json con el diccionario dado."""
-    ruta = _obtener_ruta_config()
-    try:
-        with open(ruta, "w", encoding="utf-8") as archivo:
-            json.dump(config, archivo, indent=2)
-    except Exception as e:
-        logger.error(f"No se pudo guardar config.json: {e}")
-        raise
 
-
-def obtener_proximo_remito():
-    """
-    Devuelve el próximo número de remito a usar (empieza en 1 si nunca
-    se guardó nada todavía). No modifica nada, solo lee.
-    """
-    config = _leer_config()
-    return config.get("proximo_remito", 1)
+# ---------- Carpeta de facturas ----------
 
 def obtener_ruta_facturas():
     """
@@ -77,6 +102,9 @@ def guardar_ruta_facturas(ruta):
     config["ruta_facturas"] = ruta
     _guardar_config(config)
 
+
+# ---------- Email del vendedor ----------
+
 def obtener_email_vendedor():
     """Devuelve el email configurado para mostrar en las exportaciones."""
     config = _leer_config()
@@ -88,6 +116,9 @@ def guardar_email_vendedor(email):
     config["email_vendedor"] = email
     _guardar_config(config)
 
+
+# ---------- Dirección de la empresa ----------
+
 def obtener_direccion_empresa():
     """Dirección que aparece en las facturas (arriba, junto al cliente)."""
     config = _leer_config()
@@ -98,6 +129,9 @@ def guardar_direccion_empresa(direccion):
     config = _leer_config()
     config["direccion_empresa"] = direccion
     _guardar_config(config)
+
+
+# ---------- Paginación del stock ----------
 
 def obtener_productos_por_pagina():
     """Cantidad de productos a mostrar por página en Stock."""
